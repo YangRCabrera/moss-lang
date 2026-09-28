@@ -1,0 +1,3 @@
+# Git hooks are shell scripts invoked directly via their shebang; CRLF line
+# endings break that on checkout (autocrlf would otherwise rewrite them).
+.githooks/* text eol=lf

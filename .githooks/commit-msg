@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+# $1 is the temporary file containing the commit message passed by Git
+echo "Checking commit message format..."
+cog verify --file "$1"

@@ -1,0 +1,51 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  commit-messages:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Commit Messages
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          check: true
+
+  check-lint-test:
+    name: Code Quality & Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Enable Cargo Caching
+        uses: swatinem/rust-cache@v2
+
+      - name: Enforce Formatting
+        run: cargo fmt --check
+
+      - name: Run Linter (Clippy)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Tests
+        run: cargo test --workspace --locked

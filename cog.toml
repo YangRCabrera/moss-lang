@@ -1,0 +1,18 @@
+tag_prefix = "v"
+branch_whitelist = ["main"]
+ignore_merge_commits = true
+
+pre_bump_hooks = [
+  "cargo fmt --check",
+  "cargo clippy --all-targets -- -D warnings",
+  "cargo test --workspace --locked",
+]
+post_bump_hooks = []
+
+[changelog]
+path = "CHANGELOG.md"
+template = "remote"
+remote = "github.com"
+repository = "moss-lang"
+owner = "YangThePerson"
+authors = [{ signature = "YangThePerson", username = "YangThePerson" }]
