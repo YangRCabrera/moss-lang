@@ -49,6 +49,15 @@ moss-lang/
 cargo build
 ```
 
+### Codespaces / Dev Container
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/YangThePerson/moss-lang)
+
+The repo ships a [dev container](.devcontainer/) that installs the Rust toolchain
+(pinned via [rust-toolchain.toml](rust-toolchain.toml)), cocogitto, and enables the
+git hooks automatically. No manual setup is needed: open a Codespace, or use
+"Dev Containers: Reopen in Container" in VS Code with Docker installed.
+
 ## Contributing
 
 <!-- TODO: contribution guidelines -->

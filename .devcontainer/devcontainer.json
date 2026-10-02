@@ -1,0 +1,32 @@
+{
+  "name": "moss-lang",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+  // Slow, cacheable setup (captured by Codespaces prebuilds).
+  "onCreateCommand": "bash .devcontainer/setup.sh",
+  // Local git config is never cloned, so enable the repo's hooks on every create.
+  "postCreateCommand": "git config core.hooksPath .githooks",
+
+  // setup.sh installs cog here; the commit-msg hook needs it on PATH.
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb"
+      ],
+      "settings": {
+        // Surface the same lints the pre-commit hook enforces.
+        "rust-analyzer.check.command": "clippy",
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  }
+}
