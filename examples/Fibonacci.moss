@@ -1,0 +1,31 @@
+# Naive
+
+fn fibonacci_naive (value: UInt) -> UInt =
+    match value
+        0 | 1 => value
+        _ => fibonacci_naive (value - 1) + fibonacci_naive (value - 2)
+
+# Accumulator
+
+fn fibonacci_acc (value: UInt) -> UInt =
+    fn fib_step (remaining: UInt) (current: UInt) (next: UInt) -> UInt =
+        match remaining
+            0 => current
+            1 => next
+            _ => fib_step (remaining - 1) next (current + next)
+    fib_step value 0 1
+
+# With Ref
+
+fn fibonacci_ref (value: UInt) -> UInt =
+    match value
+        0 => 0
+        _ =>
+            a: Ref<UInt> = Ref.new 0
+            b: Ref<UInt> = Ref.new 1
+            fib_step = fn _ =>
+                next = a.* + b.*
+                a := b.*
+                b := next
+            repeat (value - 1) fib_step
+            b.*

@@ -1,0 +1,15 @@
+fn main (_args: List<String>) -> Unit =
+    Range.inclusive 1 100 |> Range.to_list |> List.each fizzbuzz
+
+fn divisibility (value: Int) -> (Int, Int) =
+    (value % 3, value % 5)
+
+fn fizzbuzz_text (value: Int) -> String =
+    match divisibility value
+        (0, 0) => "FizzBuzz"
+        (0, _) => "Fizz"
+        (_, 0) => "Buzz"
+        _ => Int.to_string value
+
+fn fizzbuzz (value: Int) -> Unit =
+    value |> fizzbuzz_text |> print

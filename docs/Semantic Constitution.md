@@ -25,16 +25,36 @@ result =
 
 The block evaluates to `30`.
 
-Definitions and other constructs whose purpose is primarily structural evaluate to `Unit`.
+A binding is not itself an expression. It is a block item that introduces a name scoped over the remainder of the block. Conceptually:
 
 ```
 x = 10
-# the binding expression itself has type Unit
+y = 20
+x + y
 ```
 
-`Unit` has exactly one value.
+is:
 
-There is no distinction between "statement context" and "expression context" at the semantic level.
+```text
+let x = 10 in
+let y = 20 in
+x + y
+```
+
+A block must therefore end in an expression, never a binding.
+
+`Unit` has exactly one value, written `()`.
+
+Every expression in a block other than the final one must have type `Unit`. A value that is not `Unit` may not be silently discarded:
+
+```
+parse_config input    # error: Result discarded
+_ = parse_config input    # ok: discard is explicit
+```
+
+This prevents expected failure (see §10) from disappearing unnoticed.
+
+Apart from bindings, there is no distinction between "statement context" and "expression context" at the semantic level.
 
 ---
 
@@ -121,6 +141,23 @@ There is no implicit lazy evaluation in the core language.
 
 Lazy values may later exist as an explicit library or language abstraction.
 
+### Tail Calls Are Guaranteed
+
+The core language has no loop construct; iteration is expressed through recursion and higher-order functions.
+
+A call in tail position therefore does not consume additional stack space. A tail-recursive function runs in constant stack space regardless of how many times it recurses.
+
+```
+fn count_down (n: UInt) -> Unit =
+    match n
+        0 => ()
+        _ => count_down (n - 1)
+```
+
+runs in constant stack space for any `n`.
+
+This is a semantic guarantee, not an optional optimization.
+
 ---
 
 ## 5. Functions Are Unary
@@ -161,6 +198,31 @@ means:
 
 Partial application requires no special semantics.
 
+### Declarations and Lambdas
+
+A function declaration lists one or more parameter groups. Each parenthesized group is one irrefutable pattern and contributes exactly one unary layer:
+
+```
+fn add (a: Int) (b: Int) -> Int =
+    a + b
+```
+
+declares:
+
+```
+add: Int -> Int -> Int
+```
+
+A function declaration binds its own name within its body and is therefore recursive (see §30).
+
+An anonymous function always begins with `fn`:
+
+```
+fn x => x + 1
+```
+
+A declaration introduces its body with `=`. A lambda introduces its body with `=>`.
+
 ---
 
 ## 6. Multiple Pieces of Input Are Data
@@ -183,6 +245,15 @@ distance: Point -> Point -> Float
 
 The second function supports meaningful partial application; the first models its inputs as a single unit.
 
+Because each parameter group is one pattern (§5), the two forms are declared as:
+
+```
+fn distance (p: Point, q: Point) -> Float = ...    # (Point, Point) -> Float
+fn distance (p: Point) (q: Point) -> Float = ...   # Point -> Point -> Float
+```
+
+A comma-separated parameter group is a tuple pattern, not a list of separate arguments.
+
 Tuples, records, lists, and user-defined types are therefore the ordinary mechanism for passing structured input.
 
 ---
@@ -198,6 +269,14 @@ There are no implicit conversions between unrelated types.
 For example, an `Int` does not automatically become a `Float`, a `String`, or a `Bool`.
 
 Conversions requiring a semantic change must be explicit.
+
+Integer literals take their type from context:
+
+```
+a: Ref<UInt> = Ref.new 0    # 0 is a UInt
+```
+
+When context does not determine a type, an integer literal defaults to `Int`. This is literal typing, not an implicit conversion: an already-typed `Int` value never becomes a `UInt`.
 
 Type inference may eliminate the need to write types, but it does not weaken static typing.
 
@@ -300,7 +379,24 @@ numerator / denominator
 
 Indexing asserts that the index is valid.
 
-Integer division asserts that the denominator is nonzero.
+Integer division and modulo assert that the denominator is nonzero.
+
+Integer arithmetic asserts that the result is representable in its type. Overflow and underflow trap; they never wrap silently.
+
+```
+x: UInt = 0
+x - 1    # traps
+```
+
+Wrapping or saturating arithmetic, if provided, must be requested explicitly through distinct operations.
+
+`%` is modulo, not remainder: for a nonzero divisor, the result takes the sign of the divisor.
+
+```
+ 7 %  3    #  1
+-7 %  3    #  2
+ 7 % -3    # -2
+```
 
 If such an assertion is false, execution `traps`.
 
@@ -337,7 +433,7 @@ Pattern matching is the core mechanism for inspecting structured values and choo
 Conceptually:
 
 ```
-match value:
+match value
     PatternA => expression_a
     PatternB => expression_b
 ```
@@ -349,6 +445,16 @@ Patterns are tested from top to bottom.
 The expression belonging to the first matching pattern is evaluated.
 
 Patterns themselves do not perform arbitrary computation.
+
+Alternatives may be combined into one or-pattern:
+
+```
+match n
+    0 | 1 => n
+    _     => fib (n - 1) + fib (n - 2)
+```
+
+Every alternative of an or-pattern must bind the same names with the same types.
 
 ---
 
@@ -412,7 +518,7 @@ is invalid because `maybe_x` might contain `None`.
 The programmer must use explicit matching:
 
 ```
-match maybe_x:
+match maybe_x
     Some x => ...
     None   => ...
 ```
@@ -570,10 +676,12 @@ A `Ref<T>` is an identity-bearing mutable storage cell containing a value of typ
 Creating:
 
 ```
-counter = Ref 0
+counter = Ref.new 0
 ```
 
 allocates a fresh cell containing `0`.
+
+`Ref.new` is an ordinary function, not a data constructor. Because every call produces a new identity, creation is an effect (§33). `Ref` therefore cannot appear in a pattern.
 
 The binding `counter` itself remains immutable.
 
@@ -582,7 +690,7 @@ It permanently refers to the same cell.
 Reading a reference produces its current contained value:
 
 ```
-*counter
+counter.*
 ```
 
 has type:
@@ -608,7 +716,7 @@ Writing to a reference changes the contents of that cell.
 Conceptually:
 
 ```
-*counter = 10
+counter := 10
 ```
 
 has type:
@@ -620,16 +728,18 @@ Unit
 and afterwards:
 
 ```
-*counter
+counter.*
 ```
 
 evaluates to `10`.
 
-The dereference prefix `*` is syntactic sugar for
+Assignment uses `:=`, never `=`. `=` always introduces a binding; `:=` always writes to a cell.
 
-```
-set counter 10
-get counter
+Both forms are syntactic sugar over ordinary functions:
+
+```text
+counter.*        ≡  Ref.get counter
+counter := 10    ≡  Ref.set counter 10
 ```
 
 ---
@@ -639,16 +749,16 @@ get counter
 Copying a reference copies access to the same cell.
 
 ```
-a = Ref 0
+a = Ref.new 0
 b = a
 
-*b = 5
+b := 5
 ```
 
 Afterward:
 
 ```
-*a
+a.*
 ```
 
 evaluates to:
@@ -660,8 +770,8 @@ evaluates to:
 Creating another reference creates another identity:
 
 ```
-a = Ref 0
-b = Ref 0
+a = Ref.new 0
+b = Ref.new 0
 ```
 
 `a` and `b` contain equivalent values but denote different cells.
@@ -679,7 +789,7 @@ If a record contains a reference:
 ```
 {
     name = "Ada",
-    score = Ref 0
+    score = Ref.new 0
 }
 ```
 
@@ -698,11 +808,11 @@ This distinction must remain observable and teachable:
 Functions may capture `Ref<T>` values through normal lexical closure semantics.
 
 ```
-counter = Ref 0
+counter = Ref.new 0
 
 increment =
     fn _ =>
-        *counter = *counter + 1
+        counter := counter.* + 1
 ```
 
 Calling `increment` modifies the captured cell.
@@ -720,8 +830,8 @@ Namespaces organize names.
 Given:
 
 ```
-namespace Person:
-    age_up = ...
+namespace Person
+    fn age_up (p: Person) -> Person = ...
 ```
 
 the expression:
@@ -808,7 +918,7 @@ do not automatically become false.
 Within an `if` construct:
 
 ```
-if condition:
+if condition
     ...
 ```
 
@@ -825,16 +935,16 @@ Boolean conditional syntax may exist because it expresses programmer intent clea
 Semantically:
 
 ```text
-if condition:
+if condition
     yes
-else:
+else
     no
 ```
 
 is equivalent to:
 
 ```
-match condition:
+match condition
     true  => yes
     false => no
 ```
@@ -861,7 +971,7 @@ f value
 
 Therefore:
 
-```i
+```
 value
 |> normalize
 |> validate
@@ -880,13 +990,39 @@ Such behavior, if ever wanted, must use a different construct.
 
 Top-level bindings describe a lexical environment, not a sequence of variable assignments.
 
-Whether declarations must appear before their use is primarily an implementation/module-system decision.
+Top-level declarations are order-independent: a top-level name is visible throughout its file, including before its declaration.
+
+```
+fn main (_args: List<String>) -> Unit =
+    greet "world"    # greet is declared below
+
+fn greet (name: String) -> Unit = ...
+```
 
 However, cyclic value initialization must never produce observable partially initialized values.
 
-Recursive function definitions may be supported explicitly.
+Recursion is introduced only by `fn` declarations. A `fn` declaration's name is in scope within its own body, at top level or inside a block:
 
-For the initial implementation, recursive definitions should require enough type information to permit straightforward static checking.
+```
+fn sum_to (n: UInt) -> UInt =
+    fn go (i: UInt) (acc: UInt) -> UInt =
+        match i
+            0 => acc
+            _ => go (i - 1) (acc + i)
+    go n 0
+```
+
+A plain binding is never recursive. In:
+
+```
+f = fn x => f x
+```
+
+the `f` in the body refers to whatever `f` is visible in the enclosing scope, not to the binding being defined.
+
+A `fn` declaration that refers to itself requires annotated parameter and return types, which keeps static checking straightforward.
+
+Within a block, bindings remain sequential: a local `fn` declaration is visible from its own declaration onward.
 
 General mutually recursive value initialization is deferred.
 
@@ -929,7 +1065,9 @@ Violations of programmer assertions or runtime invariants.
 Examples:
 
 - invalid direct indexing
-- division by zero
+- division or modulo by zero
+- integer overflow or underflow
+- stack exhaustion from non-tail recursion
 - explicit `trap`
 - other operations documented as partial
 
@@ -959,7 +1097,7 @@ Even before an effect system exists, operations such as:
 
 ```
 print
-Ref
+Ref.new
 reference reads
 reference writes
 ```
@@ -992,7 +1130,9 @@ f x
 
 `if` desugars into Boolean pattern matching.
 
-Multi-expression function bodies become block expressions.
+`r.*` and `r := v` desugar into `Ref.get r` and `Ref.set r v`.
+
+Multi-expression function bodies become block expressions, and block bindings become nested `let` scopes.
 
 This distinction is intentional.
 
@@ -1024,12 +1164,18 @@ The following statements should remain true even as the language grows.
 16. Surface-language conveniences should preferably desugar into a smaller core.
 17. The source language has defined behavior even when execution traps.
 18. Future effect tracking must describe existing semantics rather than redefine them.
+19. Non-`Unit` values are never silently discarded.
+20. Tail calls do not grow the stack.
+21. Integer arithmetic never silently wraps.
+22. Only `fn` declarations are recursive; `=` never refers to the binding it defines.
 
 # Intentionally Unsettled
 
 The following decisions are deliberately not constitutional yet:
 
-- exact numeric types and overflow behavior
+- exact numeric types and widths
+- whether integer `/` floors or truncates (must stay consistent with `%` being modulo)
+- prelude / default scope (examples currently assume names such as `print` and `repeat`)
 - syntax for generic type parameters
 - typeclass/trait/capability mechanisms
 - effect-system notation and exact semantics
@@ -1044,7 +1190,6 @@ The following decisions are deliberately not constitutional yet:
 - visibility rules
 - memory-management strategy
 - equality constraints and derivation syntax
-- recursive binding syntax
 - compile-time evaluation
 - macros
 - whether top-level type annotations are mandatory
