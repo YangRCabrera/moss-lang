@@ -1,17 +1,10 @@
-use moss_lang::lexer::{Lexer, Token};
+use moss_lang::lexer::Lexer;
 
 fn main() {
-    let src = "1 + 2";
-    println!("{}", src);
+    let src = "x = 1 + 21 * 4";
+    println!("{}\n", src);
 
     let mut lexer = Lexer::new(src);
-
-    loop {
-        let token = lexer.next_token();
-        println!("{:?}", token);
-
-        if token == Token::EOF {
-            break;
-        }
-    }
+    let tokens = lexer.generate_tokens();
+    println!("{:#?}", tokens)
 }

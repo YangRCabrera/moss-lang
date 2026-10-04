@@ -1,2 +1,5 @@
 mod scan;
-pub use scan::{Lexer, Operator, Token};
+mod tokens;
+
+pub use scan::Lexer;
+pub use tokens::{Operator, Token};
